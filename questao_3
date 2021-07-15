@@ -1,0 +1,145 @@
+import cv2
+import numpy as np
+
+#reutilizando a funcao criada para as questoes 1 e 2
+def acha_pontos(cor, img):
+    
+    if cor == 'vermelho':
+        rgb = [(0, 0, 255), (0, 0, 255)]
+
+    elif cor == 'branco':
+        rgb = [(255, 255, 255), (255, 255, 255)]
+    
+    elif cor == 'azul':
+        rgb = [(255, 0, 0), (255, 0, 0)]
+    
+    #criando um blur/suavizando a imagem
+    blur = cv2.medianBlur(img, 1)
+    
+    #criando uma copia da imagem
+    output = img.copy()
+        
+    #mask = contorno pra encontrar os pontos
+    mask = cv2.inRange(blur, rgb[0], rgb[1])
+    
+    #circulando
+    circulos = cv2.HoughCircles(mask, cv2.HOUGH_GRADIENT, 1, 1, param1=1, param2=1,
+                                minRadius=1, maxRadius=1)
+        
+    count = 0
+    
+    #contagem dos círculos criados
+    if circulos is not None:
+        circulos = np.round(circulos[0, :]).astype('int')
+        
+    for (x, y, r) in circulos:
+        cv2.circle(output, (x, y), r, (255, 0, 255), -1)
+            
+        count += 1
+        
+    return count
+
+## parte da identificação da água ##
+
+azul = [(255, 0, 0), (255, 0, 0)]
+
+img = cv2.imread('meteor_challenge_01.png')
+
+#suavizar imagem
+blur = cv2.medianBlur(img, 1)
+
+output = img.copy()
+    
+#aplicando contorno pra achar os pontos
+mask = cv2.inRange(img, azul[0], azul[1])
+    
+
+#métodos do opencv utilizados para a segmentação e contorno da imagem
+_, threshold = cv2.threshold(mask, 115, 255, cv2.THRESH_BINARY)
+contours, _= cv2.findContours(threshold, cv2.RETR_TREE,
+                               cv2.CHAIN_APPROX_SIMPLE)
+  
+lista_coord = []
+
+for cnt in contours:
+    
+    #o método utilizado permite a configuracao do desenho das linhas a serem traçadas
+    #o valor de 0.17 reduz o número de linhas traçadas
+    approx = cv2.approxPolyDP(cnt, 0.17 * cv2.arcLength(cnt, True), True)
+        
+    #o método que desenha as linhas (e seleciona sua cor, espessura, etc)
+    cv2.drawContours(mask, [approx], 0, (0, 0, 255), 5)
+        
+    #devolve um array achatado
+    n = approx.ravel() 
+        
+    #a partir daqui ocorre a geracao das coordenadas dessas linhas
+    i = 0
+    for j in n:
+       if(i % 2 == 0):
+           x = n[i]
+           y = n[i + 1]
+           #lista com as coordenadas
+           cd = [x, y] 
+           lista_coord.append(cd)
+       i = i + 1          
+
+dimensoes = img.shape
+altura = img.shape[0]
+largura = img.shape[1]
+
+#criacao de uma lista para conter as coordenadas
+l_vazia = []
+for a, b in lista_coord:
+    if a not in l_vazia:
+        l_vazia.append(a)
+l_vazia.append(largura)        
+l_vazia.sort()
+#print(l_vazia)
+
+#criacao de uma copia da imagem p iniciar a id da agua
+copia = img.copy()
+
+#criacao de mais uma lista que contem as coordenadas [x, y] em duplas dentro de uma lista
+lista = []
+n = len(l_vazia)
+x = 0
+while x != (n-1):
+    lista.append([l_vazia[x], l_vazia[x+1]])
+    x += 2 
+#print(lista)
+
+#criacao de um contador para controlar o if
+b = 1
+
+#criacao de uma var para a contagem das estrelas nas imagens cortadas
+l_estrelas = 0
+
+for x, y in lista:
+    #cria uma linha que começa em uma coordenada e termina em outra da dupla [x, y]
+    cv2.line(copia, (x, 0), (x, altura), color = (0, 0, 255))
+    cv2.line(copia, (y, 0), (y, altura), color = (0, 0, 255))
+    
+    #corta a imagem verticalmente nesses pontos
+    crop_img = img[0:altura, x:y]
+    
+    #cria as imagens cortadas que contem água
+    cv2.imwrite('crop_{}.png'.format(b), crop_img)
+    nova_img = cv2.imread('crop_{}.png'.format(b))
+    
+    if b < len(lista):
+        #encontra as estrelas na imagem cortada
+        if acha_pontos('branco', nova_img) > 1:
+           l_estrelas += acha_pontos('branco', nova_img)
+           #print(l_estrelas)
+           #caso queira visualizar cada uma das partes:
+           #cv2.imshow("cropped", nova_img)
+           #cv2.waitKey(0)
+    b += 1
+        
+print('No. de estrelas que cairao perpendicularmente na agua: ', l_estrelas)
+
+#visualizacao da imagem com as linhas
+#cv2.imshow('imagem traçada', copia)
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()
